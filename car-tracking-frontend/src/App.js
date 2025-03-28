@@ -27,6 +27,7 @@ import Subscription from "./pages/subscription/Subscription";
 import SubscriptionPlans from "./pages/subscription/SubscriptionPlans";
 import PaymentHistory from "./pages/subscription/PaymentHistory";
 import CheckoutPage from "./pages/subscription/CheckoutPage";
+import Settings from "./pages/settings/Settings";
 
 // Admin Components
 import AdminDashboard from "./pages/admin/Dashboard";
