@@ -26,6 +26,7 @@ import Profile from "./pages/profile/Profile";
 import Subscription from "./pages/subscription/Subscription";
 import SubscriptionPlans from "./pages/subscription/SubscriptionPlans";
 import PaymentHistory from "./pages/subscription/PaymentHistory";
+import CheckoutPage from "./pages/subscription/CheckoutPage";
 
 // Admin Components
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -107,6 +108,10 @@ function App() {
               <Route
                 path="subscription/payments"
                 element={<PaymentHistory />}
+              />
+              <Route
+                path="subscription/checkout/:planId"
+                element={<CheckoutPage />}
               />
               <Route path="settings" element={<Settings />} />
             </Route>
