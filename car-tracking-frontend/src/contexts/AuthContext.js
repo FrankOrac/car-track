@@ -8,184 +8,161 @@ const API_URL = "http://localhost:8000/api";
 const AuthContext = createContext();
 
 // Custom hook to use the auth context
-export function useAuth() {
-  return useContext(AuthContext);
-}
+export const useAuth = () => useContext(AuthContext);
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Initialize axios with token
-  const initializeAxios = (token) => {
-    axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  };
+  // Configure axios defaults
+  axios.defaults.baseURL = "http://localhost:8000";
+  axios.defaults.withCredentials = true;
+  axios.defaults.headers.common["Accept"] = "application/json";
+  axios.defaults.headers.common["Content-Type"] = "application/json";
 
-  // Clear axios token
-  const clearAxiosToken = () => {
-    delete axios.defaults.headers.common["Authorization"];
-  };
+  // Set auth token on all requests if it exists
+  axios.interceptors.request.use(
+    (config) => {
+      const token = localStorage.getItem("auth_token");
+      if (token) {
+        config.headers["Authorization"] = `Bearer ${token}`;
+      }
+      return config;
+    },
+    (error) => Promise.reject(error)
+  );
 
-  // Initialize auth state from localStorage on startup
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const storedUser = localStorage.getItem("user");
-
-    if (token && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        setIsAuthenticated(true);
-        initializeAxios(token);
-
-        // Verify the token is still valid by fetching user data
-        fetchUser(token).catch(() => {
-          // If token is invalid, log out
-          logout();
-        });
-      } catch (error) {
-        console.error("Error parsing stored user data:", error);
+  // Handle 401 responses
+  axios.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response && error.response.status === 401) {
         logout();
       }
+      return Promise.reject(error);
     }
+  );
 
-    setLoading(false);
+  // Load user on first render
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const token = localStorage.getItem("auth_token");
+
+        if (token) {
+          const res = await axios.get("/api/user");
+          setUser(res.data.data);
+          setIsAuthenticated(true);
+        }
+      } catch (error) {
+        console.error("Failed to fetch user:", error);
+        localStorage.removeItem("auth_token");
+        setUser(null);
+        setIsAuthenticated(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchUser();
   }, []);
 
-  // Fetch current user data
-  const fetchUser = async (token) => {
-    try {
-      const response = await axios.get(`${API_URL}/user`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      setUser(response.data.user);
-      localStorage.setItem("user", JSON.stringify(response.data.user));
-      return response.data.user;
-    } catch (error) {
-      console.error("Error fetching user data:", error);
-      throw error;
-    }
-  };
-
-  // Register a new user
+  // Register user
   const register = async (userData) => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = await axios.post(`${API_URL}/register`, userData);
-
-      const { token, user } = response.data;
-
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-
-      initializeAxios(token);
-      setUser(user);
+      const res = await axios.post("/api/register", userData);
+      localStorage.setItem("auth_token", res.data.token);
+      setUser(res.data.user);
       setIsAuthenticated(true);
-
-      toast.success("Registration successful!");
-      return user;
+      return res.data;
     } catch (error) {
-      console.error("Registration error:", error);
-
-      if (error.response && error.response.data) {
-        toast.error(error.response.data.message || "Registration failed");
-      } else {
-        toast.error("Registration failed. Please try again.");
-      }
-
+      setError(error.response?.data?.message || "Registration failed");
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Login a user
+  // Login user
   const login = async (email, password) => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = await axios.post(`${API_URL}/login`, {
-        email,
-        password,
-      });
-
-      const { token, user } = response.data;
-
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-
-      initializeAxios(token);
-      setUser(user);
+      const res = await axios.post("/api/login", { email, password });
+      localStorage.setItem("auth_token", res.data.token);
+      setUser(res.data.user);
       setIsAuthenticated(true);
-
-      toast.success("Login successful!");
-      return user;
+      return res.data;
     } catch (error) {
-      console.error("Login error:", error);
-
-      if (error.response && error.response.data) {
-        toast.error(error.response.data.message || "Login failed");
-      } else {
-        toast.error("Login failed. Please check your credentials.");
-      }
-
+      setError(error.response?.data?.message || "Login failed");
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Logout a user
+  // Logout user
   const logout = async () => {
     try {
-      if (isAuthenticated) {
-        await axios.post(`${API_URL}/logout`);
-      }
+      await axios.post("/api/logout");
     } catch (error) {
       console.error("Logout error:", error);
     } finally {
-      // Clear local storage and state regardless of API success/failure
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-
-      clearAxiosToken();
+      localStorage.removeItem("auth_token");
       setUser(null);
       setIsAuthenticated(false);
-
-      toast.info("You have been logged out.");
     }
   };
 
   // Update user profile
   const updateProfile = async (userData) => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = await axios.put(`${API_URL}/user`, userData);
-
-      const updatedUser = response.data.user;
-      setUser(updatedUser);
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-
-      toast.success("Profile updated successfully!");
-      return updatedUser;
+      const res = await axios.put("/api/user/profile", userData);
+      setUser({ ...user, ...res.data.data });
+      return res.data;
     } catch (error) {
-      console.error("Update profile error:", error);
-
-      if (error.response && error.response.data) {
-        toast.error(error.response.data.message || "Failed to update profile");
-      } else {
-        toast.error("Failed to update profile. Please try again.");
-      }
-
+      setError(error.response?.data?.message || "Profile update failed");
       throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Change password
+  const changePassword = async (passwordData) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.post("/api/user/change-password", passwordData);
+      return res.data;
+    } catch (error) {
+      setError(error.response?.data?.message || "Password change failed");
+      throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   // Context value
   const value = {
     user,
-    loading,
     isAuthenticated,
+    loading,
+    error,
     register,
     login,
     logout,
     updateProfile,
-    fetchUser,
+    changePassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
+};
+
+export default AuthContext;
